@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2024-2025 Akira Moroo
 
+#include <mach-o/loader.h>
 #ifndef __APPLE__
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -10,6 +11,7 @@
 #include <assert.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,8 +22,11 @@
 #include <unistd.h>
 
 #ifdef __APPLE__
+#include <mach-o/dyld_images.h>
+#include <mach-o/getsect.h>
 #include <mach/mach_error.h>
 #include <mach/mach_init.h>
+#include <mach/mach_traps.h>
 #include <mach/task.h>
 #include <mach/vm_map.h>
 #include <mach/vm_prot.h>
@@ -391,6 +396,8 @@ LIST_HEAD(records_head, records_entry) head;
 #undef PAGE_SIZE
 #endif
 #define PAGE_SIZE (16 * 1024)
+#define my_trunc_page(x) ((x) & (~(PAGE_SIZE - 1)))
+#define my_round_page(x) my_trunc_page((x) + (PAGE_SIZE - 1))
 #endif
 #endif
 
@@ -567,6 +574,7 @@ static void scan_code(void) {
   fclose(fp);
 }
 #else
+#if 0
 static void scan_code(void) {
   LIST_INIT(&head);
 
@@ -624,6 +632,48 @@ static void scan_code(void) {
     address += size;
   }
 }
+#else
+
+extern const struct mach_header *dyld_image_header_containing_address(
+    const void *addr);
+typedef struct dyld_all_image_infos *dyld_all_image_infos_t;
+typedef struct dyld_image_info *dyld_image_info_t;
+
+static void scan_code(void) {
+  LIST_INIT(&head);
+
+  const task_t self_task = mach_task_self();
+  task_dyld_info_data_t dyld_info;
+  mach_msg_type_number_t dyld_info_cnt = TASK_DYLD_INFO_COUNT;
+  const kern_return_t tikr = task_info(mach_task_self(), TASK_DYLD_INFO,
+                                       (task_info_t)&dyld_info, &dyld_info_cnt);
+  assert(!tikr);
+  assert(dyld_info.all_image_info_format == TASK_DYLD_ALL_IMAGE_INFO_64);
+
+  const dyld_all_image_infos_t infos =
+      (dyld_all_image_infos_t)dyld_info.all_image_info_addr;
+  printf("infoArrayCount: %" PRIu32 "\n", infos->infoArrayCount);
+  const struct mach_header *kern_mh =
+      dyld_image_header_containing_address(&swtch_pri);
+  assert(kern_mh);
+  printf("kern_mh: %p\n", kern_mh);
+
+  size_t kern_text_seg_sz = 0;
+  const uint8_t *kern_text_seg = getsegmentdata(
+      (struct mach_header_64 *)kern_mh, "__TEXT", &kern_text_seg_sz);
+  printf("kern_text_seg: %p sz: %zu\n", kern_text_seg, kern_text_seg_sz);
+
+  size_t kern_text_sect_sz = 0;
+  const uint8_t *kern_text_sect = getsectiondata(
+      (struct mach_header_64 *)kern_mh, "__TEXT", "__text", &kern_text_sect_sz);
+  printf("kern_text_sect: %p sz: %zu\n", kern_text_sect, kern_text_sect_sz);
+
+  printf("recording this mapping\n");
+  fflush(stdout);
+  record_svc((char *)kern_text_sect, kern_text_sect_sz,
+             PROT_READ | PROT_EXEC);
+}
+#endif
 #endif
 
 /* entry point for binary rewriting */
