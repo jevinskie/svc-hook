@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #endif
 #endif
+#undef NDEBUG
 #include <assert.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -17,6 +18,16 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
 #include <unistd.h>
+
+#ifdef __APPLE__
+#include <mach/mach_error.h>
+#include <mach/mach_init.h>
+#include <mach/task.h>
+#include <mach/vm_map.h>
+#include <mach/vm_prot.h>
+#include <mach/vm_region.h>
+#include <pthread.h>
+#endif
 
 #ifndef __APPLE__
 #define SCV_IMM 0
@@ -368,8 +379,19 @@ struct records_entry {
 
 LIST_HEAD(records_head, records_entry) head;
 
+#ifndef __APPLE__
 #ifndef PAGE_SIZE
 #define PAGE_SIZE (0x1000)
+#endif
+#else
+#ifndef __arm64__
+#error unsupported apple arch
+#else
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+#define PAGE_SIZE (16 * 1024)
+#endif
 #endif
 
 #define INITIAL_RECORDS_SIZE (PAGE_SIZE / sizeof(uintptr_t))
@@ -381,6 +403,21 @@ static const size_t gate_epilogue_size = PARANOID_MODE ? 1 : 0;
 static const size_t gate_common_code_size = 6;
 
 static const size_t gate_size = gate_common_code_size + gate_epilogue_size;
+
+#if defined(__APPLE__) && defined(MAC_OS_VERSION_11_0)
+static void jit_write_protect(bool enabled) {
+  if (pthread_jit_write_protect_supported_np()) {
+    fprintf(stderr, "setting jit_write_protect enabled: %d\n", enabled);
+    pthread_jit_write_protect_np(enabled);
+  }
+}
+#else
+static void jit_write_protect(bool enabled) { (void)enabled; }
+#endif
+
+static void jit_execute(void) { jit_write_protect(true); }
+
+static void jit_write(void) { jit_write_protect(false); }
 
 static void init_records(struct records_entry *entry) {
   assert(entry != NULL);
@@ -416,8 +453,12 @@ static inline bool should_hook(uintptr_t addr) {
 
 /* find svc using pattern matching */
 static void record_svc(char *code, size_t code_size, int mem_prot) {
-  /* add PROT_READ to read the code */
-  assert(!mprotect(code, code_size, PROT_READ | PROT_EXEC));
+  assert(mem_prot & PROT_EXEC);
+  if (!(mem_prot & PROT_READ)) {
+    /* add PROT_READ to read the code */
+    fflush(stdout);
+    assert(!mprotect(code, code_size, PROT_READ | PROT_EXEC));
+  }
   bool has_r = mem_prot & PROT_READ;
   bool has_w = mem_prot & PROT_WRITE;
   for (size_t off = 0; off < code_size; off += 4) {
@@ -465,11 +506,15 @@ static void record_svc(char *code, size_t code_size, int mem_prot) {
 
     entry->reachable_range_min = range_min;
   }
-  /* restore the memory protection */
-  assert(!mprotect(code, code_size, mem_prot));
+  if (!(mem_prot & PROT_READ)) {
+    /* restore the memory protection */
+    fflush(stdout);
+    assert(!mprotect(code, code_size, mem_prot));
+  }
 }
 
 /* entry point for binary scanning */
+#ifndef __APPLE__
 static void scan_code(void) {
   LIST_INIT(&head);
 
@@ -521,6 +566,65 @@ static void scan_code(void) {
   }
   fclose(fp);
 }
+#else
+static void scan_code(void) {
+  LIST_INIT(&head);
+
+  task_t task = mach_task_self();
+  vm_address_t address = 0;
+  uint32_t region_count = 0;
+  natural_t depth = 0;
+
+  while (1) {
+    vm_region_submap_info_data_64_t info;
+    mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+    vm_size_t size;
+    kern_return_t kr = vm_region_recurse_64(
+        task, &address, &size, &depth, (vm_region_recurse_info_t)&info, &count);
+
+    if (kr != KERN_SUCCESS) {
+      if (kr != KERN_INVALID_ADDRESS || region_count == 0) {
+        fprintf(stderr, "Error: %s\n", mach_error_string(kr));
+        abort();
+      }
+      break;
+    }
+
+    printf("Region %d: 0x%lx - 0x%lx (size: %lu bytes) depth: %u\n",
+           ++region_count, address, address + size, size, depth);
+    printf("  Protection: %c%c%c\n",
+           (info.protection & VM_PROT_READ) ? 'r' : '-',
+           (info.protection & VM_PROT_WRITE) ? 'w' : '-',
+           (info.protection & VM_PROT_EXECUTE) ? 'x' : '-');
+
+    if (info.is_submap) {
+      depth += 1;
+      printf("  Type: submap\n");
+    } else {
+      if (info.share_mode == SM_COW && info.external_pager) {
+        printf("  Type: mapped file\n");
+      } else if (info.share_mode == SM_SHARED) {
+        printf("  Type: shared memory\n");
+      } else if (info.share_mode == SM_PRIVATE) {
+        printf("  Type: private memory\n");
+      } else if (info.share_mode == SM_EMPTY) {
+        printf("  Type: reserved/empty\n");
+      } else {
+        printf("  Type: other (share_mode: %d)\n", info.share_mode);
+      }
+    }
+
+    if (info.protection & VM_PROT_EXECUTE) {
+      assert(!info.is_submap);
+      printf("recording this mapping\n");
+      fflush(stdout);
+      record_svc((char *)address, size,
+                 info.protection & (PROT_READ | PROT_WRITE | PROT_EXEC));
+    }
+    address += size;
+  }
+}
+#endif
 
 /* entry point for binary rewriting */
 static void rewrite_code(void) {
@@ -528,8 +632,9 @@ static void rewrite_code(void) {
 
   while (!LIST_EMPTY(&head)) {
     entry = LIST_FIRST(&head);
+    dump_records(entry);
 
-    bool mproect_active = false;
+    bool mprotect_active = false;
     uintptr_t mprotect_addr = UINTPTR_MAX;
     int mprotect_prot = 0;
 
@@ -544,22 +649,25 @@ static void rewrite_code(void) {
       mem_prot |= (record & 0x2) ? PROT_READ : 0;
       mem_prot |= (record & 0x1) ? PROT_WRITE : 0;
 
-      if (mproect_active) {
+      if (mprotect_active) {
         if (!((mprotect_addr <= addr) && (addr < mprotect_addr + PAGE_SIZE))) {
           /* mprotect is active, but the address is out-of-bounds */
           assert(!mprotect((void *)mprotect_addr, PAGE_SIZE, mprotect_prot));
           mprotect_addr = UINTPTR_MAX;
           mprotect_prot = 0;
-          mproect_active = false;
+          mprotect_active = false;
         }
       }
 
-      if (!mproect_active) {
+      if (!mprotect_active) {
         mprotect_addr = align_down(addr, PAGE_SIZE);
         mprotect_prot = mem_prot;
-        mproect_active = true;
+        mprotect_active = true;
+        jit_write();
+        printf("mprotect_addr: %p\n", (void *)mprotect_addr);
+        fflush(stdout);
         assert(!mprotect((void *)mprotect_addr, PAGE_SIZE,
-                         PROT_WRITE | PROT_READ | PROT_EXEC));
+                         PROT_WRITE | PROT_READ));
       }
 
       assert(is_svc(*ptr));
@@ -568,11 +676,12 @@ static void rewrite_code(void) {
       *ptr = gen_b(addr, target);
     }
 
-    if (mproect_active) {
+    if (mprotect_active) {
       assert(!mprotect((void *)mprotect_addr, PAGE_SIZE, mprotect_prot));
+      jit_execute();
       mprotect_addr = UINTPTR_MAX;
       mprotect_prot = 0;
-      mproect_active = false;
+      mprotect_active = false;
     }
 
     LIST_REMOVE(head.lh_first, entries);
@@ -592,6 +701,7 @@ static void setup_syscall_table(void) {
   const size_t nr_svc = UINT16_MAX + 1; /* 0x10000, as #imm is 16-bit */
   const size_t svc_table_size =
       align_up(sizeof(uint32_t) * svc_entry_size * nr_svc, PAGE_SIZE);
+  jit_write();
   void *svc_table = mmap(NULL, svc_table_size, PROT_READ | PROT_WRITE,
                          MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   assert(svc_table != MAP_FAILED);
@@ -609,6 +719,7 @@ static void setup_syscall_table(void) {
   syscall_table_size = svc_table_size;
 
   assert(!mprotect(svc_table, svc_table_size, PROT_EXEC));
+  jit_execute();
 }
 
 static void setup_trampoline(void) {
@@ -634,6 +745,7 @@ static void setup_trampoline(void) {
 
     /* allocate memory at the aligned reachable address */
     void *trampoline = MAP_FAILED;
+    jit_write();
     for (uintptr_t addr = range_min; addr < range_max; addr += PAGE_SIZE) {
       trampoline = mmap((void *)addr, mem_size, PROT_READ | PROT_WRITE,
                         MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
@@ -739,7 +851,12 @@ static void setup_trampoline(void) {
      * configures this memory region as eXecute-Only-Memory (XOM).
      * this enables to cause a segmentation fault for a NULL pointer access.
      */
+#ifndef __APPLE__
     assert(!mprotect(entry->trampoline, mem_size, PROT_EXEC));
+#else
+    assert(!mprotect(entry->trampoline, mem_size, PROT_EXEC | PROT_READ));
+#endif
+    jit_execute();
   }
 }
 

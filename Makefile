@@ -10,10 +10,11 @@ CLANG_FORMAT ?= clang-format
 CLEANFILES = $(PROGS) *.o *.d
 
 CC := clang
-CFLAGS = -O3
+# CFLAGS = -O3
+CFLAGS = -O0
 # CFLAGS += -pipe
 CFLAGS += -g
-CFLAGS += -Werror
+# CFLAGS += -Werror
 CFLAGS += -Wall
 CFLAGS += -Wunused-function
 CFLAGS += -Wextra
