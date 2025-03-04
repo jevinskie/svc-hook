@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2024-2025 Akira Moroo
 
+#ifndef __APPLE__
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #endif
 #include <assert.h>
 #include <dlfcn.h>
@@ -15,6 +17,12 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
 #include <unistd.h>
+
+#ifndef __APPLE__
+#define SCV_IMM 0
+#else
+#define SVC_IMM 0x80
+#endif
 
 #ifdef SUPPLEMENTAL__SYSCALL_RECORD
 /*
@@ -87,7 +95,27 @@ size_t syscall_table_size = 0;
 #define PARANOID_MODE 0
 #endif
 
+long syscall_hook(int64_t x0, int64_t x1, int64_t x2, int64_t x3, int64_t x4,
+                  int64_t x5, int64_t x8, /* syscall NR */
+                  int64_t retptr);
+
+#ifndef __clang__
+#define SVC_ASM asm volatile
+#else
+#define SVC_ASM asm
+#endif
+
+#ifndef __APPLE__
+#define GLOBL(x) ".globl " STR(x) " \n\t"
+#define GLABEL(x) STR(x)
+#else
+#define GLOBL(x) ".globl _" STR(x) " \n\t"
+#define GLABEL(x) "_" STR(x)
+#endif
+
+#ifndef __clang__
 void ____asm_impl(void) {
+#endif
   /*
    * enter_syscall triggers a kernel-space system call
    * @param	a1	arg0 (x0)
@@ -100,17 +128,23 @@ void ____asm_impl(void) {
    * @param	a8	return address (x7)
    * @return		return value (x0)
    */
-  asm volatile(
-      ".extern syscall_table \n\t"
-      ".globl enter_syscall \n\t"
-      "enter_syscall: \n\t"
+  SVC_ASM(
+      ".extern " GLABEL(syscall_hook) " \n\t"
+      GLOBL(enter_syscall)
+      ".p2align	2 \n\t"
+      GLABEL(enter_syscall) ": \n\t"
       "mov x8, x6 \n\t"
-      /*
-       * NOTE: Below assembly is same as "ldr x6, =syscall_table", but lld fails
-       * to resolve relocation R_AARCH64_ABS64. So, we use adrp/ldr instead.
-       */
+  /*
+   * NOTE: Below assembly is same as "ldr x6, =syscall_table", but lld fails
+   * to resolve relocation R_AARCH64_ABS64. So, we use adrp/ldr instead.
+   */
+#ifndef __APPLE__
       "adrp x6, :got:syscall_table \n\t"
       "ldr x6, [x6, #:got_lo12:syscall_table] \n\t"
+#else
+      "adrp x6, _syscall_table@GOTPAGE \n\t"
+      "ldr x6, [x6, _syscall_table@GOTPAGEOFF] \n\t"
+#endif
       "ldr x6, [x6] \n\t"
       "add x6, x6, xzr, lsl #3 \n\t"
       "br x6 \n\t");
@@ -126,39 +160,40 @@ void ____asm_impl(void) {
    * the register values follow the calling convention
    * of the system calls.
    */
-  asm volatile(
-      ".globl asm_syscall_hook \n\t"
-      "asm_syscall_hook: \n\t"
+  SVC_ASM(
+      GLOBL(asm_syscall_hook)
+      ".p2align	2 \n\t"
+      GLABEL(asm_syscall_hook) ": \n\t"
 
       "cmp x8, #139 \n\t" /* rt_sigreturn */
-      "b.eq do_rt_sigreturn \n\t" /* bypass hook */
+      "b.eq Ldo_rt_sigreturn \n\t" /* bypass hook */
       "cmp x8, #220 \n\t" /* clone */
-      "b.eq handle_clone \n\t"
+      "b.eq Lhandle_clone \n\t"
       "cmp x8, #435 \n\t" /* clone3 */
-      "b.eq handle_clone3 \n\t"
-      "b do_syscall_hook \n\t" /* other syscalls */
+      "b.eq Lhandle_clone3 \n\t"
+      "b Ldo_syscall_hook \n\t" /* other syscalls */
 
-      "handle_clone: \n\t"
+      "Lhandle_clone: \n\t"
       "and x15, x0, #256 \n\t" /* (flags & CLONE_VM) != 0 */
       "cmp x15, #256 \n\t"
-      "b.eq clone_stack_copy\n\t"
+      "b.eq Lclone_stack_copy \n\t"
 
-      "b do_syscall_hook \n\t"
+      "b Ldo_syscall_hook \n\t"
 
-      "clone_stack_copy: \n\t"
+      "Lclone_stack_copy: \n\t"
       PUSH_CONTEXT(x1, CONTEXT_SIZE)
       SAVE_CONTEXT(x1)
-      "b do_syscall_hook \n\t"
+      "b Ldo_syscall_hook \n\t"
 
-      "handle_clone3: \n\t"
+      "Lhandle_clone3: \n\t"
       "ldr x15, [x0,#0] \n\t" /* cl_args->flags */
       "and x15, x15, #256 \n\t" /* (flags & CLONE_VM) != 0 */
       "cmp x15, #256 \n\t"
-      "b.eq clone3_stack_copy \n\t"
+      "b.eq Lclone3_stack_copy \n\t"
 
-      "b do_syscall_hook \n\t"
+      "b Ldo_syscall_hook \n\t"
 
-      "clone3_stack_copy: \n\t"
+      "Lclone3_stack_copy: \n\t"
       /* cl_args->stack_size -= CONTEXT_SIZE */
       "ldr x15, [x0,#48] \n\t"
       PUSH_CONTEXT(x15, CONTEXT_SIZE)
@@ -170,9 +205,9 @@ void ____asm_impl(void) {
 
       /* Copy x0-x30 to cl_args->stack + cl_args->stack_size */
       SAVE_CONTEXT(x15)
-      "b do_syscall_hook \n\t"
+      "b Ldo_syscall_hook \n\t"
 
-      "do_syscall_hook: \n\t"
+      "Ldo_syscall_hook: \n\t"
 
       /* assuming callee preserves x19-x28  */
 
@@ -183,20 +218,24 @@ void ____asm_impl(void) {
       "mov x7, x14 \n\t" /* return address */
       "mov x6, x8 \n\t"  /* syscall NR */
 
-      "bl syscall_hook \n\t"
+      "bl " GLABEL(syscall_hook) " \n\t"
 
       RESTORE_CONTEXT(sp)
       POP_CONTEXT(sp, CONTEXT_SIZE)
 
-      "do_return: \n\t"
+      "Ldo_return: \n\t"
       /* Use x14 scratch register to return original pc */
       "br x14 \n\t"
 
-      ".globl do_rt_sigreturn \n\t"
-      "do_rt_sigreturn: \n\t"
-      "svc #0 \n\t"
-      "b do_return \n\t");
+      GLOBL(do_rt_sigreturn)
+      ".p2align	2 \n\t"
+      GLABEL(do_rt_sigreturn) ": \n\t"
+      "Ldo_rt_sigreturn: \n\t"
+      "svc #" STR(SVC_IMM) " \n\t"
+      "b Ldo_return \n\t");
+#ifndef __clang__
 }
+#endif
 
 static long (*hook_fn)(int64_t a1, int64_t a2, int64_t a3, int64_t a4,
                        int64_t a5, int64_t a6, int64_t a7,

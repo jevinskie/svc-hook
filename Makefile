@@ -3,19 +3,21 @@
 # Copyright (C) 2025 Akira Moroo
 
 PROGS = libsvchook.so
+PARANOID := 1
 
 CLANG_FORMAT ?= clang-format
 
 CLEANFILES = $(PROGS) *.o *.d
 
+CC := clang
 CFLAGS = -O3
-CFLAGS += -pipe
+# CFLAGS += -pipe
 CFLAGS += -g
 CFLAGS += -Werror
 CFLAGS += -Wall
 CFLAGS += -Wunused-function
 CFLAGS += -Wextra
-CFLAGS += -fPIC
+# CFLAGS += -fPIC
 
 ifeq ($(PARANOID), 1)
 CFLAGS += -DPARANOID_MODE
@@ -26,8 +28,8 @@ CFLAGS += -DSUPPLEMENTAL__SYSCALL_RECORD
 endif
 
 LDFLAGS += -shared
-LDFLAGS += -rdynamic
-LDFLAGS += -ldl
+# LDFLAGS += -rdynamic
+# LDFLAGS += -ldl
 
 C_SRCS = main.c
 OBJS = $(C_SRCS:.c=.o)
