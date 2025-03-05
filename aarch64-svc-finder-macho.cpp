@@ -114,8 +114,12 @@ enum class regx : int {
   x27,
   x28,
   x29,
+  fp = x29,
   x30,
+  lr = x30,
   x31,
+  xzr = x31,
+  sp = x31,
 };
 
 enum class regw : int {
@@ -152,6 +156,8 @@ enum class regw : int {
   w29,
   w30,
   w31,
+  wzr = w31,
+  wsp = w31,
 };
 
 static constexpr uint32_t bcond_opc_mask = 0xff000010;
@@ -216,33 +222,37 @@ static std::optional<uint16_t> decodeLDRB(const uint32_t inst) {
   return imm12;
 }
 
-static constexpr uint32_t movxi_opc_mask = 0xffe0001f;
-static constexpr uint32_t movxi_opc_match = 0xd4000001;
-static constexpr uint32_t movxi_reg_mask = 0x001fffe0;
-static constexpr uint32_t movxi_reg_shift = 5;
-static constexpr uint32_t movxi_imm16_mask = 0x001fffe0;
-static constexpr uint32_t movxi_imm16_shift = 5;
+static constexpr uint32_t movzwi_opc_mask = 0xffe0001f;
+static constexpr uint32_t movzwi_opc_match = 0xd4000001;
+static constexpr uint32_t movzwi_reg_mask = 0x001fffe0;
+static constexpr uint32_t movzwi_reg_shift = 5;
+static constexpr uint32_t movzwi_imm16_mask = 0x001fffe0;
+static constexpr uint32_t movzwi_imm16_shift = 5;
 
-static int isMOVXi(const uint32_t inst) {
-  return (inst & movxi_opc_mask) == movxi_opc_match;
+static regw isMOVZWi(const uint32_t inst) {
+  if ((inst & movzwi_opc_mask) != movzwi_opc_match) {
+    return regw::invalid;
+  }
+  return regw((inst & movzwi_reg_mask) >> movzwi_reg_shift);
 }
 
-static std::optional<uint16_t> decodeMOVXi(const uint32_t inst) {
-  if (!isMOVXi(inst)) {
+static std::optional<uint16_t> decodeMOVZWi(const uint32_t inst) {
+  if (isMOVZWi(inst) == regw::invalid) {
     return {};
   }
-  return (inst & movxi_imm16_mask) >> movxi_imm16_shift;
+  return (inst & movzwi_imm16_mask) >> movzwi_imm16_shift;
 }
 
-static int isMOVXiWithReg(const uint32_t inst, ) {
-  return (inst & movxi_opc_mask) == movxi_opc_match;
+static int isMOVZWiWithReg(const uint32_t inst, const regw reg) {
+  return (inst & movzwi_opc_mask) == movzwi_opc_match;
 }
 
-static std::optional<uint16_t> decodeMOVXiWithReg(const uint32_t inst) {
-  if (!isMOVXi(inst)) {
+static std::optional<uint16_t> decodeMOVZWiWithReg(const uint32_t inst,
+                                                   const regw reg) {
+  if (!isMOVZWiWithReg(inst, reg)) {
     return {};
   }
-  return (inst & movxi_imm16_mask) >> movxi_imm16_shift;
+  return (inst & movzwi_imm16_mask) >> movzwi_imm16_shift;
 }
 
 static constexpr uint32_t movnxi_opc_mask = 0xffe0001f;
