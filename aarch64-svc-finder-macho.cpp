@@ -326,6 +326,19 @@ static std::vector<size_t> find_svc_in_range(
     if (!isSVC(instr) || decodeSVC(instr) != 0x80) {
       continue;
     }
+    const uint32_t prev_inst =
+        read_scalar<uint32_t>(data + off - sizeof(instr));
+    if (!isMOVZWiWithReg(prev_inst, regw::w16) &&
+        !isMOVNXiForReg(prev_inst, regx::x16) &&
+        !isMOVNWiForReg(prev_inst, regw::w16)) {
+      continue;
+    }
+    const uint32_t next_inst =
+        read_scalar<uint32_t>(data + off + sizeof(instr));
+    const auto cond = isBcond(next_inst);
+    if (!(cond == bcond_t::cs || cond == bcond_t::cc || isRET(next_inst))) {
+      continue;
+    }
     matches.emplace_back(off);
   }
 
@@ -357,7 +370,8 @@ int main(int argc, const char *argv[]) {
       }
       const auto svc_offs =
           find_svc_in_range({(uint8_t *)mh + seg->fileoff, seg->filesize});
-      fmt::print("svc_offs: sz: {} {}\n", svc_offs.size(), fmt::join(svc_offs, ", "));
+      fmt::print("svc_offs: sz: {} {}\n", svc_offs.size(),
+                 fmt::join(svc_offs, ", "));
     }
   }
   return EXIT_SUCCESS;
