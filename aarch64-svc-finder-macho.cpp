@@ -46,6 +46,8 @@ static std::optional<uint16_t> decodeSVC(const uint32_t inst) {
 
 static constexpr uint32_t b_opc_mask = 0x7c000000;
 static constexpr uint32_t b_opc_match = 0x14000000;
+static constexpr uint32_t b_imm26_mask = 0x03ff'ffff;
+static constexpr uint32_t b_imm26_lshift = 6;
 
 static bool isB(const uint32_t inst) {
   return (inst & b_opc_mask) == b_opc_match;
@@ -55,7 +57,8 @@ static std::optional<int32_t> decodeB(const uint32_t inst) {
   if (!isB(inst)) {
     return {};
   }
-  return ((((int32_t)(inst & ~b_opc_mask)) << 6) >> 4);
+  return ((((int32_t)(inst & 0x3ffffff)) << b_imm26_lshift) >>
+          (b_imm26_lshift - 2));
 }
 
 enum bcond_t : uint8_t {
@@ -75,11 +78,14 @@ enum bcond_t : uint8_t {
   lt = 0b101'1'1,
   le = 0b110'1'1,
   al = 0b111'1'1,
+  al0 = 0b111'0'1,
 };
 
 static constexpr uint32_t bcond_opc_mask = 0xff000010;
 static constexpr uint32_t bcond_opc_match = 0x54000000;
 static constexpr uint32_t bcond_cond_mask = 0x0000000f;
+static constexpr uint32_t bcond_imm19_mask = 0x0000000f;
+static constexpr uint32_t bcond_imm19_shift = 5;
 
 static bcond_t isBcond(const uint32_t inst) {
   if ((inst & bcond_opc_mask) == bcond_opc_match) {
