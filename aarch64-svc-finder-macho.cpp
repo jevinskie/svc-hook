@@ -58,11 +58,35 @@ static std::optional<int32_t> decodeB(const uint32_t inst) {
   return ((((int32_t)(inst & ~b_opc_mask)) << 6) >> 4);
 }
 
-static constexpr uint32_t bcond_opc_mask = 0x7c000000;
-static constexpr uint32_t bcond_opc_match = 0x14000000;
+enum bcond_t : uint8_t {
+  invalid = 0b000'0'0,
+  eq = 0b000'0'1,
+  cs = 0b001'0'1,
+  mi = 0b010'0'1,
+  vs = 0b011'0'1,
+  hi = 0b100'0'1,
+  ge = 0b101'0'1,
+  gt = 0b110'0'1,
+  ne = 0b000'1'1,
+  cc = 0b001'1'1,
+  pl = 0b010'1'1,
+  vc = 0b011'1'1,
+  ls = 0b100'1'1,
+  lt = 0b101'1'1,
+  le = 0b110'1'1,
+  al = 0b111'1'1,
+};
 
-static bool isBcond(const uint32_t inst) {
-  return (inst & bcond_opc_mask) == bcond_opc_match;
+static constexpr uint32_t bcond_opc_mask = 0xff000010;
+static constexpr uint32_t bcond_opc_match = 0x54000000;
+static constexpr uint32_t bcond_cond_mask = 0x0000000f;
+
+static bcond_t isBcond(const uint32_t inst) {
+  if ((inst & bcond_opc_mask) == bcond_opc_match) {
+    return bcond_t(((inst & bcond_cond_mask) << 1) | 1);
+  } else {
+    return bcond_t::invalid;
+  }
 }
 
 static std::optional<int32_t> decodeBcond(const uint32_t inst) {
