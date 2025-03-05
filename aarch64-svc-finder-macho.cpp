@@ -57,7 +57,7 @@ static std::optional<int32_t> decodeB(const uint32_t inst) {
   if (!isB(inst)) {
     return {};
   }
-  return ((((int32_t)(inst & 0x3ffffff)) << b_imm26_lshift) >>
+  return ((((int32_t)(inst & b_imm26_mask)) << b_imm26_lshift) >>
           (b_imm26_lshift - 2));
 }
 
