@@ -234,6 +234,31 @@ static constexpr uint16_t decodeMOVZWi(const uint32_t inst) {
   return (inst >> movzwi_imm16_shift) & movzwi_imm16_pmask;
 }
 
+static constexpr uint32_t movzxi_opc_mask = 0xffe00000;
+static constexpr uint32_t movzxi_opc_match = 0xd2800000;
+static constexpr uint32_t movzxi_reg_mask = 0x0000001f;
+static constexpr uint32_t movzxi_reg_shift = 0;
+static constexpr uint32_t movzxi_imm16_pmask = 0x0000ffff;
+static constexpr uint32_t movzxi_imm16_shift = 5;
+
+static constexpr regx isMOVZXi(const uint32_t inst) {
+  if ((inst & movzxi_opc_mask) != movzxi_opc_match) {
+    return regx::invalid;
+  }
+  return regx((inst & movzxi_reg_mask) >> movzxi_reg_shift);
+}
+
+static constexpr bool isMOVZXiWithReg(const uint32_t inst, const regx reg) {
+  if ((inst & movzxi_opc_mask) != movzxi_opc_match) {
+    return false;
+  }
+  return regx((inst & movzxi_reg_mask) >> movzxi_reg_shift) == reg;
+}
+
+static constexpr uint16_t decodeMOVZXi(const uint32_t inst) {
+  return (inst >> movzxi_imm16_shift) & movzxi_imm16_pmask;
+}
+
 static constexpr uint32_t movnxi_opc_mask = 0xffe00000;
 static constexpr uint32_t movnxi_opc_match = 0x92800000;
 static constexpr uint32_t movnxi_reg_mask = 0x0000001f;
@@ -248,7 +273,7 @@ static constexpr regx isMOVNXi(const uint32_t inst) {
   return regx((inst & movnxi_reg_mask) >> movnxi_reg_shift);
 }
 
-static constexpr bool isMOVNXiForReg(const uint32_t inst, const regx reg) {
+static constexpr bool isMOVNXiWithReg(const uint32_t inst, const regx reg) {
   if ((inst & movnxi_opc_mask) != movnxi_opc_match) {
     return false;
   }
@@ -273,7 +298,7 @@ static constexpr regw isMOVNWi(const uint32_t inst) {
   return regw((inst & movnwi_reg_mask) >> movnwi_reg_shift);
 }
 
-static constexpr bool isMOVNWiForReg(const uint32_t inst, const regw reg) {
+static constexpr bool isMOVNWiWithReg(const uint32_t inst, const regw reg) {
   if ((inst & movnwi_opc_mask) != movnwi_opc_match) {
     return false;
   }
@@ -319,6 +344,7 @@ static std::vector<size_t> find_svc_in_range(
   std::vector<size_t> matches;
   const auto data = buf.data();
   const auto sz = buf.size_bytes();
+  assert((uintptr_t)data % sizeof(uint32_t) == 0);
   assert(sz % sizeof(uint32_t) == 0);
 
   for (size_t off = 0; off + sizeof(uint32_t) <= sz; off += sizeof(uint32_t)) {
@@ -328,15 +354,28 @@ static std::vector<size_t> find_svc_in_range(
     }
     const uint32_t prev_inst =
         read_scalar<uint32_t>(data + off - sizeof(instr));
-    if (!isMOVZWiWithReg(prev_inst, regw::w16) &&
-        !isMOVNXiForReg(prev_inst, regx::x16) &&
-        !isMOVNWiForReg(prev_inst, regw::w16)) {
-      continue;
-    }
     const uint32_t next_inst =
         read_scalar<uint32_t>(data + off + sizeof(instr));
+    // FIXME: 683 missing 2 or so syscalls
+    fprintf(stderr, "0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx ", (prev_inst & 0xff),
+            ((prev_inst >> 8) & 0xff), ((prev_inst >> 16) & 0xff),
+            ((prev_inst >> 24) & 0xff));
+    fprintf(stderr, "0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx ", (instr & 0xff),
+            ((instr >> 8) & 0xff), ((instr >> 16) & 0xff),
+            ((instr >> 24) & 0xff));
+    fprintf(stderr, "0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx ", (next_inst & 0xff),
+            ((next_inst >> 8) & 0xff), ((next_inst >> 16) & 0xff),
+            ((next_inst >> 24) & 0xff));
+    if (!isMOVZWiWithReg(prev_inst, regw::w16) &&
+        !isMOVZXiWithReg(prev_inst, regx::x16) &&
+        !isMOVNXiWithReg(prev_inst, regx::x16) &&
+        !isMOVNWiWithReg(prev_inst, regw::w16)) {
+      continue;
+    }
     const auto cond = isBcond(next_inst);
-    if (!(cond == bcond_t::cs || cond == bcond_t::cc || isRET(next_inst))) {
+    if (!(isRET(next_inst) || cond != bcond_t::invalid)) {
+      // if (!(cond == bcond_t::cs || cond == bcond_t::cc || isRET(next_inst)))
+      // {
       continue;
     }
     matches.emplace_back(off);
