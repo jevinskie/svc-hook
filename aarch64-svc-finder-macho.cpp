@@ -373,6 +373,23 @@ static std::vector<size_t> find_svc_in_range(
     continue;
   svc_bad:
     // FIXME: 683 missing 2 or so syscalls
+    //
+    // 0x10 0x00 0xb0 0xd2
+    // 0x01 0x10 0x00 0xd4
+    // 0xc0 0x03 0x5f 0xd6
+    //
+    // 0x10 0x00 0xb0 0xd2
+    // 0x01 0x10 0x00 0xd4
+    // 0xc0 0x03 0x5f 0xd6
+    //
+    // 1000b0d2
+    // 011000d4
+    // c0035fd6
+    //
+    // 1000b0d2
+    // 011000d4
+    // c0035fd6
+    //
     // .section	__TEXT,__text,regular,pure_instructions
     // mov	x16, #0x80000000                ; <MCInst #4791 MOVZXi
     //                                       ;  <MCOperand Reg:252>
