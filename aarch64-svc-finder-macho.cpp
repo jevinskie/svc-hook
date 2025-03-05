@@ -24,18 +24,23 @@ static_assert(std::endian::native == std::endian::little);
 
 using namespace fmt::literals;
 
-static constexpr uint32_t imm_mask = 0x00FFFFE0u;
+static constexpr uint32_t ret_opc_match = 0xd65f03c0;
+
+static bool isRET(const uint32_t inst) { return inst == ret_opc_match; }
 
 static constexpr uint32_t svc_opc_mask = 0xffe0001f;
 static constexpr uint32_t svc_opc_match = 0xd4000001;
 static constexpr uint32_t svc_imm16_mask = 0x001fffe0;
-static constexpr uint32_t svc_imm16_shift = 0x5;
+static constexpr uint32_t svc_imm16_shift = 5;
 
 static bool isSVC(const uint32_t inst) {
   return (inst & svc_opc_mask) == svc_opc_match;
 }
 
-static bool decodeSVC(const uint32_t inst) {
+static std::optional<uint16_t> decodeSVC(const uint32_t inst) {
+  if (!isSVC(inst)) {
+    return {};
+  }
   return (inst & svc_imm16_mask) >> svc_imm16_shift;
 }
 
@@ -51,6 +56,48 @@ static std::optional<int32_t> decodeB(const uint32_t inst) {
     return {};
   }
   return ((((int32_t)(inst & ~b_opc_mask)) << 6) >> 4);
+}
+
+static constexpr uint32_t bcond_opc_mask = 0x7c000000;
+static constexpr uint32_t bcond_opc_match = 0x14000000;
+
+static bool isBcond(const uint32_t inst) {
+  return (inst & bcond_opc_mask) == bcond_opc_match;
+}
+
+static std::optional<int32_t> decodeBcond(const uint32_t inst) {
+  if (!isBcond(inst)) {
+    return {};
+  }
+  return ((((int32_t)(inst & ~bcond_opc_mask)) << 6) >> 4);
+}
+
+static constexpr uint32_t blo_opc_mask = 0x7c000000;
+static constexpr uint32_t blo_opc_match = 0x14000000;
+
+static bool isBLO(const uint32_t inst) {
+  return (inst & blo_opc_mask) == blo_opc_match;
+}
+
+static std::optional<int32_t> decodeBLO(const uint32_t inst) {
+  if (!isBLO(inst)) {
+    return {};
+  }
+  return ((((int32_t)(inst & ~blo_opc_mask)) << 6) >> 4);
+}
+
+static constexpr uint32_t bhi_opc_mask = 0x7c000000;
+static constexpr uint32_t bhi_opc_match = 0x14000000;
+
+static bool isBHI(const uint32_t inst) {
+  return (inst & bhi_opc_mask) == bhi_opc_match;
+}
+
+static std::optional<int32_t> decodeBHI(const uint32_t inst) {
+  if (!isBHI(inst)) {
+    return {};
+  }
+  return ((((int32_t)(inst & ~bhi_opc_mask)) << 6) >> 4);
 }
 
 static constexpr uint32_t adrp_opc_mask = 0x9f000000;
@@ -89,6 +136,38 @@ static std::optional<uint16_t> decodeLDRB(const uint32_t inst) {
   }
   const uint16_t imm12 = (inst & ldrb_imm12_mask) >> ldrb_imm12_shift;
   return imm12;
+}
+
+static constexpr uint32_t movi_x16_opc_mask = 0xffe0001f;
+static constexpr uint32_t movi_x16_opc_match = 0xd4000001;
+static constexpr uint32_t movi_x16_imm16_mask = 0x001fffe0;
+static constexpr uint32_t movi_x16_imm16_shift = 5;
+
+static bool isMOVix16(const uint32_t inst) {
+  return (inst & movi_x16_opc_mask) == movi_x16_opc_match;
+}
+
+static std::optional<uint16_t> decodeMOVix16(const uint32_t inst) {
+  if (!isMOVix16(inst)) {
+    return {};
+  }
+  return (inst & movi_x16_imm16_mask) >> movi_x16_imm16_shift;
+}
+
+static constexpr uint32_t movi_w16_opc_mask = 0xffe0001f;
+static constexpr uint32_t movi_w16_opc_match = 0xd4000001;
+static constexpr uint32_t movi_w16_imm16_mask = 0x001fffe0;
+static constexpr uint32_t movi_w16_imm16_shift = 5;
+
+static bool isMOViw16(const uint32_t inst) {
+  return (inst & movi_w16_opc_mask) == movi_w16_opc_match;
+}
+
+static std::optional<uint16_t> decodeMOViw16(const uint32_t inst) {
+  if (!isMOViw16(inst)) {
+    return {};
+  }
+  return (inst & movi_w16_imm16_mask) >> movi_w16_imm16_shift;
 }
 
 template <typename T>
