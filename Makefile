@@ -30,7 +30,7 @@ ifeq ($(SYSCALL_RECORD), 1)
 CFLAGS += -DSUPPLEMENTAL__SYSCALL_RECORD
 endif
 
-LDFLAGS += -shared
+# LDFLAGS += -shared
 # LDFLAGS += -rdynamic
 # LDFLAGS += -ldl
 
@@ -40,7 +40,7 @@ OBJS = $(C_SRCS:.c=.o)
 all: $(PROGS)
 
 libsvchook.so: main.c
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
 
 aarch64-svc-finder-macho: aarch64-svc-finder-macho.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -lfmt

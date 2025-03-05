@@ -1,6 +1,9 @@
+
+#undef NDEBUG
 #include <fcntl.h>
 #include <fmt/compile.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <fmt/std.h>
 #include <mach-o/loader.h>
 #include <sys/mman.h>
@@ -9,7 +12,6 @@
 #include <unistd.h>
 
 #include <bit>
-#undef NDEBUG
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -315,16 +317,16 @@ static void *mmap_file(const char *path, size_t *size) {
 static std::vector<size_t> find_svc_in_range(
     const std::span<const uint8_t> buf) {
   std::vector<size_t> matches;
-  const uint32_t imm_shifted = (0 << 5u);
   const auto data = buf.data();
   const auto sz = buf.size_bytes();
   assert(sz % sizeof(uint32_t) == 0);
 
   for (size_t off = 0; off + sizeof(uint32_t) <= sz; off += sizeof(uint32_t)) {
     const auto instr = read_scalar<uint32_t>(data + off);
-    if (false) {
-      matches.emplace_back(off);
+    if (!isSVC(instr) || decodeSVC(instr) != 0x80) {
+      continue;
     }
+    matches.emplace_back(off);
   }
 
   return matches;
@@ -338,5 +340,25 @@ int main(int argc, const char *argv[]) {
   size_t buf_sz = 0;
   const void *buf = mmap_file(argv[1], &buf_sz);
   assert(buf);
+  assert(buf_sz);
+  const mach_header_64 *mh = (mach_header_64 *)buf;
+  assert(mh->magic == MH_MAGIC_64);
+  const struct load_command *lc =
+      (struct load_command *)((uintptr_t)mh + sizeof(struct mach_header_64));
+  for (uint32_t i = 0; i < mh->ncmds; ++i) {
+    lc = (const struct load_command *)((uintptr_t)lc + lc->cmdsize);
+    if (lc->cmd != LC_SEGMENT_64) {
+      continue;
+    }
+    const struct segment_command_64 *seg = (struct segment_command_64 *)lc;
+    if (seg->initprot & PROT_EXEC) {
+      if (seg->fileoff + seg->filesize > buf_sz) {
+        continue;
+      }
+      const auto svc_offs =
+          find_svc_in_range({(uint8_t *)mh + seg->fileoff, seg->filesize});
+      fmt::print("svc_offs: sz: {} {}\n", svc_offs.size(), fmt::join(svc_offs, ", "));
+    }
+  }
   return EXIT_SUCCESS;
 }
