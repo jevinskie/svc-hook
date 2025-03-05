@@ -670,8 +670,7 @@ static void scan_code(void) {
 
   printf("recording this mapping\n");
   fflush(stdout);
-  record_svc((char *)kern_text_sect, kern_text_sect_sz,
-             PROT_READ | PROT_EXEC);
+  record_svc((char *)kern_text_sect, kern_text_sect_sz, PROT_READ | PROT_EXEC);
 }
 #endif
 #endif

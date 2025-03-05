@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2025 Akira Moroo
 
-PROGS = libsvchook.so
+PROGS = libsvchook.so aarch64-svc-finder-macho
 PARANOID := 1
 
 CLANG_FORMAT ?= clang-format
 
-CLEANFILES = $(PROGS) *.o *.d
+CLEANFILES = $(PROGS) *.o *.d *.dSYM/
 
 CC := clang
 # CFLAGS = -O3
@@ -19,6 +19,8 @@ CFLAGS += -Wall
 CFLAGS += -Wunused-function
 CFLAGS += -Wextra
 # CFLAGS += -fPIC
+
+CXXFLAGS := $(CFLAGS) -std=gnu++2b -isystem /opt/homebrew/opt/fmt/include -L /opt/homebrew/opt/fmt/lib
 
 ifeq ($(PARANOID), 1)
 CFLAGS += -DPARANOID_MODE
@@ -37,8 +39,11 @@ OBJS = $(C_SRCS:.c=.o)
 
 all: $(PROGS)
 
-$(PROGS): $(OBJS)
+libsvchook.so: main.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+aarch64-svc-finder-macho: aarch64-svc-finder-macho.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -lfmt
 
 clean:
 	-@rm -rf $(CLEANFILES)
