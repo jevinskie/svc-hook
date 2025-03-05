@@ -449,8 +449,11 @@ int main(int argc, const char *argv[]) {
       }
       const auto svc_offs =
           find_svc_in_range({(uint8_t *)mh + seg->fileoff, seg->filesize});
-      fmt::print("svc_offs: sz: {} {}\n", svc_offs.size(),
-                 fmt::join(svc_offs, ", "));
+      fmt::print(
+          "svc_offs: fileoff: {:#x} voff: {:#x} sz: {} fsz: {:#x} vsz: {:#x} "
+          "{}\n",
+          seg->fileoff, seg->vmaddr, seg->filesize, seg->vmsize,
+          svc_offs.size(), fmt::join(svc_offs, ", "));
     }
   }
   return EXIT_SUCCESS;
