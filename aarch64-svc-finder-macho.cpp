@@ -356,7 +356,42 @@ static std::vector<size_t> find_svc_in_range(
         read_scalar<uint32_t>(data + off - sizeof(instr));
     const uint32_t next_inst =
         read_scalar<uint32_t>(data + off + sizeof(instr));
+    const auto cond = isBcond(next_inst);
+    if (!isMOVZWiWithReg(prev_inst, regw::w16) &&
+        !isMOVZXiWithReg(prev_inst, regx::x16) &&
+        !isMOVNXiWithReg(prev_inst, regx::x16) &&
+        !isMOVNWiWithReg(prev_inst, regw::w16)) {
+      // continue;
+      goto svc_bad;
+    }
+    // if (!(isRET(next_inst) || cond != bcond_t::invalid)) {
+    if (!(cond == bcond_t::cs || cond == bcond_t::cc || isRET(next_inst))) {
+      // continue;
+      goto svc_bad;
+    }
+    matches.emplace_back(off);
+    continue;
+  svc_bad:
     // FIXME: 683 missing 2 or so syscalls
+    // .section	__TEXT,__text,regular,pure_instructions
+    // mov	x16, #0x80000000                ; <MCInst #4791 MOVZXi
+    //                                       ;  <MCOperand Reg:252>
+    //                                       ;  <MCOperand Imm:32768>
+    //                                       ;  <MCOperand Imm:16>>
+    //                                       ; =2147483648
+    // svc	#0x80                           ; <MCInst #6942 SVC
+    //                                       ;  <MCOperand Imm:128>>
+    // ret                                     ; <MCInst #5102 RET
+    //                                       ;  <MCOperand Reg:5>>
+    // mov	x16, #0x80000000                ; <MCInst #4791 MOVZXi
+    //                                       ;  <MCOperand Reg:252>
+    //                                       ;  <MCOperand Imm:32768>
+    //                                       ;  <MCOperand Imm:16>>
+    //                                       ; =2147483648
+    // svc	#0x80                           ; <MCInst #6942 SVC
+    //                                       ;  <MCOperand Imm:128>>
+    // ret                                     ; <MCInst #5102 RET
+    //                                       ;  <MCOperand Reg:5>>
     fprintf(stderr, "0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx ", (prev_inst & 0xff),
             ((prev_inst >> 8) & 0xff), ((prev_inst >> 16) & 0xff),
             ((prev_inst >> 24) & 0xff));
@@ -366,19 +401,7 @@ static std::vector<size_t> find_svc_in_range(
     fprintf(stderr, "0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx ", (next_inst & 0xff),
             ((next_inst >> 8) & 0xff), ((next_inst >> 16) & 0xff),
             ((next_inst >> 24) & 0xff));
-    if (!isMOVZWiWithReg(prev_inst, regw::w16) &&
-        !isMOVZXiWithReg(prev_inst, regx::x16) &&
-        !isMOVNXiWithReg(prev_inst, regx::x16) &&
-        !isMOVNWiWithReg(prev_inst, regw::w16)) {
-      continue;
-    }
-    const auto cond = isBcond(next_inst);
-    if (!(isRET(next_inst) || cond != bcond_t::invalid)) {
-      // if (!(cond == bcond_t::cs || cond == bcond_t::cc || isRET(next_inst)))
-      // {
-      continue;
-    }
-    matches.emplace_back(off);
+    continue;
   }
 
   return matches;
