@@ -477,6 +477,18 @@ int main(int argc, const char *argv[]) {
         const void *svcp = (void *)((uintptr_t)mh + seg->fileoff + svc_off);
         const struct mach_header_64 *svc_mh = find_mach_header_backwards(svcp);
         printf("svc mh: %p\n", svc_mh);
+        if (svc_mh) {
+          const struct load_command *svc_lc =
+              (struct load_command *)((uintptr_t)svc_mh + sizeof(struct mach_header_64));
+          for (uint32_t j = 0; j < svc_mh->ncmds; ++j) {
+            if (svc_lc->cmd == LC_ID_DYLIB) {
+              const struct dylib_command *dylib_cmd = (struct dylib_command *)svc_lc;
+              const char *dylib_name = (const char *)((uintptr_t)dylib_cmd + dylib_cmd->dylib.name.offset);
+              printf("LC_ID_DYLIB: %s\n", dylib_name);
+            }
+            svc_lc = (const struct load_command *)((uintptr_t)svc_lc + svc_lc->cmdsize);
+          }
+        }
       }
     }
   }
