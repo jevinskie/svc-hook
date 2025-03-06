@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2025 Akira Moroo
 
-PROGS = libsvchook.so aarch64-svc-finder-macho aarch64-svc-finder-macho-hdr-raw
+PROGS = libsvchook.so aarch64-svc-finder-macho aarch64-svc-finder-macho-hdr-raw macro-metaprogramming-exemplar
 PARANOID := 1
 
 CLANG_FORMAT ?= clang-format
@@ -48,6 +48,9 @@ aarch64-svc-finder-macho: aarch64-svc-finder-macho.cpp
 
 aarch64-svc-finder-macho-hdr-raw: aarch64-svc-finder-macho-hdr-raw.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) -I /opt/homebrew/opt/capstone/include -L /opt/homebrew/opt/capstone/lib -lcapstone
+
+macro-metaprogramming-exemplar: macro-metaprogramming-exemplar.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	-@rm -rf $(CLEANFILES)

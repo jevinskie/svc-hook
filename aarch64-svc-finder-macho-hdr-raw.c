@@ -314,6 +314,25 @@ static uint32_t decodeMOVNWi(const uint32_t inst) {
          << (hw * 16);
 }
 
+static bool is_syscall(const uint32_t *ip) {
+  const uint32_t instr = ip[0];
+  if (!isSVC(instr) || decodeSVC(instr) != 0x80) {
+    return false;
+  }
+  const uint32_t prev_inst = ip[-1];
+  const uint32_t next_inst = ip[1];
+  const enum bcond_t cond = isBcond(next_inst);
+  if (!isMOVZWiWithReg(prev_inst, w16) && !isMOVZXiWithReg(prev_inst, x16) &&
+      !isMOVNXiWithReg(prev_inst, x16) && !isMOVNWiWithReg(prev_inst, w16)) {
+    return false;
+  }
+  // if (!(isRET(next_inst) || cond != cinvalid)) {
+  if (!(cond == cs || cond == cc || isRET(next_inst))) {
+    return false;
+  }
+  return true;
+}
+
 int main(int argc, const char *argv[]) {
   if (argc != 2) {
     printf("usage: aarch64-svc-finder-macho-hdr-raw <path to mach-o dump>\n");
@@ -354,7 +373,8 @@ int main(int argc, const char *argv[]) {
   for (size_t i = 0; i < buf_sz - sizeof(uint32_t); i += sizeof(uint32_t)) {
     const uint32_t *ip = (uint32_t *)(buf + i);
     const uint32_t inst = *ip;
-    if (inst == 0xd4001001) {
+    // if (inst == 0xd4001001) {
+    if (is_syscall(ip)) {
       printf("svc 0x80 at file offset 0x%zx\n", i);
       for (int j = -64; j <= 64; ++j) {
         cs_count = cs_disasm(cshndl, (uint8_t *)&ip[j], sizeof(ip[j]), i + j, 1,
