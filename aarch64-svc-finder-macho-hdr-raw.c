@@ -59,22 +59,23 @@ int main(int argc, const char *argv[]) {
     const uint32_t inst = *ip;
     if (inst == 0xd4001001) {
       printf("svc 0x80 at file offset 0x%zx\n", i);
-      cs_count = cs_disasm(cshndl, (const uint8_t *)(ip - 64),
-                           sizeof(uint64_t) * (64 * 2 + 1), i, 0, &cs_insn);
-      if (cs_count > 0) {
-        size_t j;
-        for (j = 0; j < cs_count; j++) {
+      for (int j = -64; j <= 64; ++j) {
+        cs_count =
+            cs_disasm(cshndl, buf + i + j, sizeof(ip[j]), i + j, 1, &cs_insn);
+        if (cs_count == 1) {
           printf("0x%" PRIx64
                  ":\t0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx\t%s\t\t%s\n",
-                 cs_insn[j].address, inst & 0xff, (inst >> 8) & 0xff,
-                 (inst >> 16) & 0xff, (inst >> 24) & 0xff, cs_insn[j].mnemonic,
-                 cs_insn[j].op_str);
-        }
+                 cs_insn->address, inst & 0xff, (inst >> 8) & 0xff,
+                 (inst >> 16) & 0xff, (inst >> 24) & 0xff, cs_insn->mnemonic,
+                 cs_insn->op_str);
 
-        cs_free(cs_insn, cs_count);
-      } else {
-        printf("ERROR: Failed to disassemble given code at file offset %zx\n",
-               i);
+          cs_free(cs_insn, cs_count);
+        } else {
+          printf(
+              "0x%zx:\t0x%02hhx 0x%02hhx 0x%02hhx 0x%02hhx\t<no disassembly>\n",
+              i + j, inst & 0xff, (inst >> 8) & 0xff, (inst >> 16) & 0xff,
+              (inst >> 24) & 0xff);
+        }
       }
       const uintptr_t up = (uintptr_t)ip;
       const uintptr_t up_page = __builtin_align_down(up, PAGE_SIZE);
