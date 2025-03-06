@@ -24,7 +24,7 @@
 #ifdef PAGE_SIZE
 #undef PAGE_SIZE
 #endif
-#define PAGE_SIZE (16 * 1024)
+#define PAGE_SIZE (4 * 1024)
 
 // don't bother with endian swapping for now
 static_assert(std::endian::native == std::endian::little);
@@ -492,19 +492,30 @@ int main(int argc, const char *argv[]) {
                svcp, (void *)((uintptr_t)seg->vmaddr + svc_off),
                (void *)((uintptr_t)seg->fileoff + svc_off));
         const struct mach_header_64 *svc_mh = find_mach_header_backwards(svcp);
-        printf("svc mh: %p\n", svc_mh);
+        printf("svc mh: %p foff: 0x%zx\n", svc_mh,
+               (uintptr_t)mh - (uintptr_t)buf);
         if (svc_mh) {
           const struct load_command *svc_lc =
               (struct load_command *)((uintptr_t)svc_mh +
                                       sizeof(struct mach_header_64));
           for (uint32_t j = 0; j < svc_mh->ncmds; ++j) {
             if (svc_lc->cmd == LC_ID_DYLIB) {
-              const struct dylib_command *dylib_cmd =
+              const struct dylib_command *dylib_id_cmd =
                   (struct dylib_command *)svc_lc;
               const char *dylib_name =
-                  (const char *)((uintptr_t)dylib_cmd +
-                                 dylib_cmd->dylib.name.offset);
-              printf("LC_ID_DYLIB: %s\n", dylib_name);
+                  (const char *)((uintptr_t)dylib_id_cmd +
+                                 dylib_id_cmd->dylib.name.offset);
+              printf("LC_ID_DYLIB: %s mh: %p foff: 0x%zx\n", dylib_name, svc_mh,
+                     (uintptr_t)mh - (uintptr_t)buf);
+              break;
+            } else if (svc_lc->cmd == LC_ID_DYLINKER) {
+              const struct dylinker_command *dynlinker_cmd =
+                  (struct dylinker_command *)svc_lc;
+              const char *dynlinker_name =
+                  (const char *)((uintptr_t)dynlinker_cmd +
+                                 dynlinker_cmd->name.offset);
+              printf("LC_ID_DYLINKER: %s mh: %p foff: 0x%zx\n", dynlinker_name,
+                     svc_mh, (uintptr_t)mh - (uintptr_t)buf);
               break;
             }
             svc_lc = (const struct load_command *)((uintptr_t)svc_lc +

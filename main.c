@@ -40,6 +40,8 @@
 #define SVC_IMM 0x80
 #endif
 
+// TODO: make sure to use collect/construct phase and commit phase
+
 #ifdef SUPPLEMENTAL__SYSCALL_RECORD
 /*
  * SUPPLEMENTAL: syscall record without syscalls
