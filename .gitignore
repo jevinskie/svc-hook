@@ -1,3 +1,4 @@
 *.d
 *.o
 libsvchook.so
+.aider*

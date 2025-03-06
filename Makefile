@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2025 Akira Moroo
 
-PROGS = libsvchook.so aarch64-svc-finder-macho
+PROGS = libsvchook.so aarch64-svc-finder-macho aarch64-svc-finder-macho-hdr-raw
 PARANOID := 1
 
 CLANG_FORMAT ?= clang-format
@@ -10,6 +10,7 @@ CLANG_FORMAT ?= clang-format
 CLEANFILES = $(PROGS) *.o *.d *.dSYM/
 
 CC := clang
+CXX := clang++
 # CFLAGS = -O3
 CFLAGS = -O0
 # CFLAGS += -pipe
@@ -44,6 +45,9 @@ libsvchook.so: main.c
 
 aarch64-svc-finder-macho: aarch64-svc-finder-macho.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -lfmt
+
+aarch64-svc-finder-macho-hdr-raw: aarch64-svc-finder-macho-hdr-raw.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	-@rm -rf $(CLEANFILES)
