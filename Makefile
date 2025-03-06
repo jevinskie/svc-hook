@@ -47,7 +47,7 @@ aarch64-svc-finder-macho: aarch64-svc-finder-macho.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -lfmt
 
 aarch64-svc-finder-macho-hdr-raw: aarch64-svc-finder-macho-hdr-raw.c
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) -I /opt/homebrew/opt/capstone/include -L /opt/homebrew/opt/capstone/lib -lcapstone
 
 clean:
 	-@rm -rf $(CLEANFILES)
