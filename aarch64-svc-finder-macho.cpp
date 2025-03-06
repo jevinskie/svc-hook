@@ -487,10 +487,10 @@ int main(int argc, const char *argv[]) {
           seg->fileoff, seg->vmaddr, svc_offs.size(), seg->filesize,
           seg->vmsize, fmt::join(svc_offs, ", "));
       for (const auto svc_off : svc_offs) {
-        printf("svc at vm %p file %p looking for mach header\n",
-               (void *)((uintptr_t)seg->vmaddr + svc_off),
-               (void *)((uintptr_t)seg->fileoff + svc_off));
         const void *svcp = (void *)((uintptr_t)mh + seg->fileoff + svc_off);
+        printf("svc at %p at macho vm %p file %p looking for mach header\n",
+               svcp, (void *)((uintptr_t)seg->vmaddr + svc_off),
+               (void *)((uintptr_t)seg->fileoff + svc_off));
         const struct mach_header_64 *svc_mh = find_mach_header_backwards(svcp);
         printf("svc mh: %p\n", svc_mh);
         if (svc_mh) {
@@ -505,6 +505,7 @@ int main(int argc, const char *argv[]) {
                   (const char *)((uintptr_t)dylib_cmd +
                                  dylib_cmd->dylib.name.offset);
               printf("LC_ID_DYLIB: %s\n", dylib_name);
+              break;
             }
             svc_lc = (const struct load_command *)((uintptr_t)svc_lc +
                                                    svc_lc->cmdsize);
