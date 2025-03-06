@@ -214,12 +214,14 @@ static constexpr uint16_t decodeLDRB(const uint32_t inst) {
   return imm12;
 }
 
-static constexpr uint32_t movzwi_opc_mask = 0xffe00000;
+static constexpr uint32_t movzwi_opc_mask = 0xffc00000;
 static constexpr uint32_t movzwi_opc_match = 0x52800000;
 static constexpr uint32_t movzwi_reg_mask = 0x0000001f;
 static constexpr uint32_t movzwi_reg_shift = 0;
 static constexpr uint32_t movzwi_imm16_pmask = 0x0000ffff;
 static constexpr uint32_t movzwi_imm16_shift = 5;
+static constexpr uint32_t movzwi_hw_pmask = 0x00000001;
+static constexpr uint32_t movzwi_hw_shift = 21;
 
 static constexpr regw isMOVZWi(const uint32_t inst) {
   if ((inst & movzwi_opc_mask) != movzwi_opc_match) {
@@ -235,16 +237,20 @@ static constexpr bool isMOVZWiWithReg(const uint32_t inst, const regw reg) {
   return regw((inst & movzwi_reg_mask) >> movzwi_reg_shift) == reg;
 }
 
-static constexpr uint16_t decodeMOVZWi(const uint32_t inst) {
-  return (inst >> movzwi_imm16_shift) & movzwi_imm16_pmask;
+static constexpr uint32_t decodeMOVZWi(const uint32_t inst) {
+  const uint8_t hw = (inst >> movzwi_hw_shift) & movzwi_hw_pmask;
+  return ((uint32_t)(inst >> movzwi_imm16_shift) & movzwi_imm16_pmask)
+         << (hw * 16);
 }
 
-static constexpr uint32_t movzxi_opc_mask = 0xffe00000;
+static constexpr uint32_t movzxi_opc_mask = 0xff800000;
 static constexpr uint32_t movzxi_opc_match = 0xd2800000;
 static constexpr uint32_t movzxi_reg_mask = 0x0000001f;
 static constexpr uint32_t movzxi_reg_shift = 0;
 static constexpr uint32_t movzxi_imm16_pmask = 0x0000ffff;
 static constexpr uint32_t movzxi_imm16_shift = 5;
+static constexpr uint32_t movzxi_hw_pmask = 0x00000003;
+static constexpr uint32_t movzxi_hw_shift = 21;
 
 static constexpr regx isMOVZXi(const uint32_t inst) {
   if ((inst & movzxi_opc_mask) != movzxi_opc_match) {
@@ -260,8 +266,10 @@ static constexpr bool isMOVZXiWithReg(const uint32_t inst, const regx reg) {
   return regx((inst & movzxi_reg_mask) >> movzxi_reg_shift) == reg;
 }
 
-static constexpr uint16_t decodeMOVZXi(const uint32_t inst) {
-  return (inst >> movzxi_imm16_shift) & movzxi_imm16_pmask;
+static constexpr uint64_t decodeMOVZXi(const uint32_t inst) {
+  const uint8_t hw = (inst >> movzxi_hw_shift) & movzxi_hw_pmask;
+  return ((uint64_t)(inst >> movzxi_imm16_shift) & movzxi_imm16_pmask)
+         << (hw * 16);
 }
 
 static constexpr uint32_t movnxi_opc_mask = 0xff800000;
