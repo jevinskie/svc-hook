@@ -21,6 +21,11 @@
 #include <span>
 #include <utility>
 
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+#define PAGE_SIZE (16 * 1024)
+
 // don't bother with endian swapping for now
 static_assert(std::endian::native == std::endian::little);
 
@@ -424,6 +429,17 @@ static std::vector<size_t> find_svc_in_range(
   return matches;
 }
 
+const struct mach_header_64 *find_mach_header_backwards(const void *p) {
+  const uintptr_t up = (uintptr_t)p;
+  const uintptr_t up_page = __builtin_align_down(up, PAGE_SIZE);
+  for (uintptr_t upg = up_page; upg > 0; upg -= PAGE_SIZE) {
+    if (*(uint32_t *)upg == MH_MAGIC_64) {
+      return (const struct mach_header_64 *)upg;
+    }
+  }
+  return NULL;
+}
+
 int main(int argc, const char *argv[]) {
   if (argc != 2) {
     printf("usage: aarch64-svc-finder-macho <path to mach-o>\n");
@@ -451,9 +467,17 @@ int main(int argc, const char *argv[]) {
           find_svc_in_range({(uint8_t *)mh + seg->fileoff, seg->filesize});
       fmt::print(
           "svc_offs: fileoff: {:#x} voff: {:#x} sz: {} fsz: {:#x} vsz: {:#x} "
-          "{}\n",
-          seg->fileoff, seg->vmaddr, seg->filesize, seg->vmsize,
-          svc_offs.size(), fmt::join(svc_offs, ", "));
+          "{:#x}\n",
+          seg->fileoff, seg->vmaddr, svc_offs.size(), seg->filesize,
+          seg->vmsize, fmt::join(svc_offs, ", "));
+      for (const auto svc_off : svc_offs) {
+        printf("svc at vm %p file %p looking for mach header\n",
+               (void *)((uintptr_t)seg->vmaddr + svc_off),
+               (void *)((uintptr_t)seg->fileoff + svc_off));
+        const void *svcp = (void *)((uintptr_t)mh + seg->fileoff + svc_off);
+        const struct mach_header_64 *svc_mh = find_mach_header_backwards(svcp);
+        printf("svc mh: %p\n", svc_mh);
+      }
     }
   }
   return EXIT_SUCCESS;
