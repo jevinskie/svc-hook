@@ -264,12 +264,14 @@ static constexpr uint16_t decodeMOVZXi(const uint32_t inst) {
   return (inst >> movzxi_imm16_shift) & movzxi_imm16_pmask;
 }
 
-static constexpr uint32_t movnxi_opc_mask = 0xffe00000;
+static constexpr uint32_t movnxi_opc_mask = 0xff800000;
 static constexpr uint32_t movnxi_opc_match = 0x92800000;
 static constexpr uint32_t movnxi_reg_mask = 0x0000001f;
 static constexpr uint32_t movnxi_reg_shift = 0;
 static constexpr uint32_t movnxi_imm16_pmask = 0x0000ffff;
 static constexpr uint32_t movnxi_imm16_shift = 0;
+static constexpr uint32_t movnxi_hw_pmask = 0x00000003;
+static constexpr uint32_t movnxi_hw_shift = 21;
 
 static constexpr regx isMOVNXi(const uint32_t inst) {
   if ((inst & movnxi_opc_mask) != movnxi_opc_match) {
@@ -285,16 +287,20 @@ static constexpr bool isMOVNXiWithReg(const uint32_t inst, const regx reg) {
   return regx((inst & movnxi_reg_mask) >> movnxi_reg_shift) == reg;
 }
 
-static constexpr uint16_t decodeMOVNXi(const uint32_t inst) {
-  return (inst >> movnxi_imm16_shift) & movnxi_imm16_pmask;
+static constexpr uint64_t decodeMOVNXi(const uint32_t inst) {
+  const uint8_t hw = (inst >> movnxi_hw_shift) & movnxi_hw_pmask;
+  return ((uint64_t)((inst >> movnxi_imm16_shift) & movnxi_imm16_pmask))
+         << (hw * 16);
 }
 
-static constexpr uint32_t movnwi_opc_mask = 0xffe00000;
+static constexpr uint32_t movnwi_opc_mask = 0xffc00000;
 static constexpr uint32_t movnwi_opc_match = 0x12800000;
 static constexpr uint32_t movnwi_reg_mask = 0x0000001f;
 static constexpr uint32_t movnwi_reg_shift = 0;
 static constexpr uint32_t movnwi_imm16_pmask = 0x0000ffff;
 static constexpr uint32_t movnwi_imm16_shift = 0;
+static constexpr uint32_t movnwi_hw_pmask = 0x00000001;
+static constexpr uint32_t movnwi_hw_shift = 21;
 
 static constexpr regw isMOVNWi(const uint32_t inst) {
   if ((inst & movnwi_opc_mask) != movnwi_opc_match) {
@@ -310,8 +316,10 @@ static constexpr bool isMOVNWiWithReg(const uint32_t inst, const regw reg) {
   return regw((inst & movnwi_reg_mask) >> movnwi_reg_shift) == reg;
 }
 
-static constexpr uint16_t decodeMOVNWi(const uint32_t inst) {
-  return (inst >> movnwi_imm16_shift) & movnwi_imm16_pmask;
+static constexpr uint32_t decodeMOVNWi(const uint32_t inst) {
+  const uint8_t hw = (inst >> movnwi_hw_shift) & movnwi_hw_pmask;
+  return ((uint32_t)((inst >> movnwi_imm16_shift) & movnwi_imm16_pmask))
+         << (hw * 16);
 }
 
 template <typename T>
